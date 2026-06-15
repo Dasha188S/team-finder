@@ -6,11 +6,25 @@ from django.urls import reverse
 from .managers import UserManager
 from .utils import generate_avatar
 
+# === Ограничения длин полей =================================================
+# Все размеры вынесены на уровень модуля, чтобы не было «магических чисел»
+# в определениях полей.
+
+SKILL_NAME_MAX_LENGTH = 124
+USER_NAME_MAX_LENGTH = 124
+USER_SURNAME_MAX_LENGTH = 124
+USER_PHONE_MAX_LENGTH = 12
+USER_ABOUT_MAX_LENGTH = 256
+
+AVATAR_UPLOAD_DIR = "avatars/"
+DEFAULT_AVATAR_USERNAME = "user"
+AVATAR_FILE_EXTENSION = ".png"
+
 
 class Skill(models.Model):
     """Навык, привязываемый к пользователям."""
 
-    name = models.CharField("Название", max_length=124, unique=True)
+    name = models.CharField("Название", max_length=SKILL_NAME_MAX_LENGTH, unique=True)
 
     class Meta:
         verbose_name = "Навык"
@@ -25,12 +39,12 @@ class User(AbstractBaseUser, PermissionsMixin):
     """Пользователь Team Finder. Логин по email."""
 
     email = models.EmailField("Email", unique=True)
-    name = models.CharField("Имя", max_length=124)
-    surname = models.CharField("Фамилия", max_length=124)
-    avatar = models.ImageField("Аватар", upload_to="avatars/")
-    phone = models.CharField("Телефон", max_length=12, blank=True)
+    name = models.CharField("Имя", max_length=USER_NAME_MAX_LENGTH)
+    surname = models.CharField("Фамилия", max_length=USER_SURNAME_MAX_LENGTH)
+    avatar = models.ImageField("Аватар", upload_to=AVATAR_UPLOAD_DIR)
+    phone = models.CharField("Телефон", max_length=USER_PHONE_MAX_LENGTH, blank=True)
     github_url = models.URLField("GitHub", blank=True)
-    about = models.CharField("О себе", max_length=256, blank=True)
+    about = models.CharField("О себе", max_length=USER_ABOUT_MAX_LENGTH, blank=True)
 
     is_active = models.BooleanField("Активен", default=True)
     is_staff = models.BooleanField("Администратор", default=False)
@@ -69,6 +83,6 @@ class User(AbstractBaseUser, PermissionsMixin):
         if not self.avatar:
             seed = self.email or self.name
             avatar_file = generate_avatar(self.name, seed=seed)
-            filename = f"{(self.email or 'user').split('@')[0]}.png"
-            self.avatar.save(filename, avatar_file, save=False)
+            local_part = (self.email or DEFAULT_AVATAR_USERNAME).split("@")[0]
+            self.avatar.save(local_part + AVATAR_FILE_EXTENSION, avatar_file, save=False)
         super().save(*args, **kwargs)

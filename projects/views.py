@@ -1,21 +1,36 @@
 """View-функции приложения projects."""
+from http import HTTPStatus
+
 from django.contrib.auth.decorators import login_required
-from django.core.paginator import Paginator
 from django.http import JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.views.decorators.http import require_POST
 
+from team_finder.pagination import paginate
+
 from .forms import ProjectForm
 from .models import Project
 
+# === Параметры страницы списка ==============================================
+
 PROJECTS_PER_PAGE = 12
+
+# === Сообщения JSON-ошибок ==================================================
+
+ERROR_KEY = "error"
+ERROR_PROJECT_NOT_FOUND = "project not found"
+ERROR_FORBIDDEN = "forbidden"
+ERROR_ALREADY_CLOSED = "already closed"
+
+# === Имена URL-маршрутов ====================================================
+
+URL_PROJECT_DETAIL = "projects:detail"
 
 
 def project_list(request):
     """Главная страница: все проекты, отсортированные от новых к старым."""
     queryset = Project.objects.select_related("owner").order_by("-created_at")
-    paginator = Paginator(queryset, PROJECTS_PER_PAGE)
-    page_obj = paginator.get_page(request.GET.get("page"))
+    page_obj = paginate(request, queryset, PROJECTS_PER_PAGE)
     return render(
         request,
         "projects/project_list.html",
@@ -44,7 +59,7 @@ def project_create(request):
             project.owner = request.user
             project.save()
             project.participants.add(request.user)
-            return redirect(f"/projects/{project.pk}/")
+            return redirect(URL_PROJECT_DETAIL, project_id=project.pk)
     else:
         form = ProjectForm()
     return render(
@@ -58,12 +73,12 @@ def project_create(request):
 def project_edit(request, project_id: int):
     project = get_object_or_404(Project, pk=project_id)
     if project.owner_id != request.user.id:
-        return redirect(f"/projects/{project.pk}/")
+        return redirect(URL_PROJECT_DETAIL, project_id=project.pk)
     if request.method == "POST":
         form = ProjectForm(request.POST, instance=project)
         if form.is_valid():
             form.save()
-            return redirect(f"/projects/{project.pk}/")
+            return redirect(URL_PROJECT_DETAIL, project_id=project.pk)
     else:
         form = ProjectForm(instance=project)
     return render(
@@ -76,12 +91,24 @@ def project_edit(request, project_id: int):
 @login_required
 @require_POST
 def project_complete(request, project_id: int):
-    """Завершить проект (только владелец, статус open -> closed)."""
-    project = get_object_or_404(Project, pk=project_id)
+    """Завершить проект (только владелец, статус ``open`` -> ``closed``).
+
+    Эндпоинт возвращает только JSON, поэтому ``get_object_or_404`` не подходит
+    (он отдаёт HTML). Существование проекта проверяем через ``.first()``.
+    """
+    project = Project.objects.filter(pk=project_id).first()
+    if project is None:
+        return JsonResponse(
+            {ERROR_KEY: ERROR_PROJECT_NOT_FOUND}, status=HTTPStatus.NOT_FOUND
+        )
     if project.owner_id != request.user.id:
-        return JsonResponse({"error": "forbidden"}, status=403)
+        return JsonResponse(
+            {ERROR_KEY: ERROR_FORBIDDEN}, status=HTTPStatus.FORBIDDEN
+        )
     if project.status != Project.STATUS_OPEN:
-        return JsonResponse({"error": "already closed"}, status=400)
+        return JsonResponse(
+            {ERROR_KEY: ERROR_ALREADY_CLOSED}, status=HTTPStatus.BAD_REQUEST
+        )
     project.status = Project.STATUS_CLOSED
     project.save(update_fields=["status"])
     return JsonResponse({"status": "ok", "project_status": project.status})
@@ -90,12 +117,20 @@ def project_complete(request, project_id: int):
 @login_required
 @require_POST
 def project_toggle_participate(request, project_id: int):
-    """Включить/выключить участие текущего пользователя в проекте."""
-    project = get_object_or_404(Project, pk=project_id)
-    if project.participants.filter(pk=request.user.pk).exists():
+    """Включить/выключить участие текущего пользователя в проекте.
+
+    Эндпоинт возвращает только JSON — проверяем существование через
+    ``.first()`` (а не ``get_object_or_404``, который вернул бы HTML 404).
+    """
+    project = Project.objects.filter(pk=project_id).first()
+    if project is None:
+        return JsonResponse(
+            {ERROR_KEY: ERROR_PROJECT_NOT_FOUND}, status=HTTPStatus.NOT_FOUND
+        )
+
+    is_already_participant = project.participants.filter(pk=request.user.pk).exists()
+    if is_already_participant:
         project.participants.remove(request.user)
-        is_participant = False
     else:
         project.participants.add(request.user)
-        is_participant = True
-    return JsonResponse({"status": "ok", "participant": is_participant})
+    return JsonResponse({"status": "ok", "participant": not is_already_participant})

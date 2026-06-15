@@ -3,15 +3,31 @@ from django.conf import settings
 from django.db import models
 from django.urls import reverse
 
+# === Ограничения длин полей и доступные статусы =============================
+# Все «магические числа» и значения статуса вынесены в константы уровня
+# модуля.
+
+PROJECT_NAME_MAX_LENGTH = 200
+PROJECT_STATUS_MAX_LENGTH = 6
+
+PROJECT_STATUS_OPEN = "open"
+PROJECT_STATUS_CLOSED = "closed"
+PROJECT_STATUS_CHOICES = [
+    (PROJECT_STATUS_OPEN, "Open"),
+    (PROJECT_STATUS_CLOSED, "Closed"),
+]
+
 
 class Project(models.Model):
     """Pet-проект, опубликованный пользователем."""
 
-    STATUS_OPEN = "open"
-    STATUS_CLOSED = "closed"
-    STATUS_CHOICES = [(STATUS_OPEN, "Open"), (STATUS_CLOSED, "Closed")]
+    # Ссылки-сокращения на константы статуса, чтобы пользоваться через
+    # ``Project.STATUS_OPEN`` (как принято в Django-моделях).
+    STATUS_OPEN = PROJECT_STATUS_OPEN
+    STATUS_CLOSED = PROJECT_STATUS_CLOSED
+    STATUS_CHOICES = PROJECT_STATUS_CHOICES
 
-    name = models.CharField("Название", max_length=200)
+    name = models.CharField("Название", max_length=PROJECT_NAME_MAX_LENGTH)
     description = models.TextField("Описание", blank=True)
     owner = models.ForeignKey(
         settings.AUTH_USER_MODEL,
@@ -23,7 +39,7 @@ class Project(models.Model):
     github_url = models.URLField("GitHub", blank=True)
     status = models.CharField(
         "Статус",
-        max_length=6,
+        max_length=PROJECT_STATUS_MAX_LENGTH,
         choices=STATUS_CHOICES,
         default=STATUS_OPEN,
     )
