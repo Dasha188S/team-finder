@@ -2,11 +2,13 @@
 from django.conf import settings
 from django.conf.urls.static import static
 from django.contrib import admin
-from django.shortcuts import redirect
 from django.urls import include, path
+from django.views.generic.base import RedirectView
+
+HOME_REDIRECT_ROUTE = "projects:list"
 
 urlpatterns = [
-    path("", lambda request: redirect("/projects/list/", permanent=False)),
+    path("", RedirectView.as_view(pattern_name=HOME_REDIRECT_ROUTE, permanent=False)),
     path("admin/", admin.site.urls),
     path("projects/", include("projects.urls", namespace="projects")),
     path("users/", include("users.urls", namespace="users")),
